@@ -15,7 +15,8 @@ func main() {
 
 	req, err := http.NewRequest("POST", "http://www.01happy.com/demo/accept.php", strings.NewReader("name=cjb"))
 	if err != nil {
-		// handle error
+		fmt.Println(err)
+		return
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
