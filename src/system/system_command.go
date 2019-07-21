@@ -75,7 +75,9 @@ func method4() {
 
 	//函数返回一个*Cmd，用于使用给出的参数执行name指定的程序
 	//cmd := exec.Command("/bin/bash", "-c", "java -version")
-	cmd := exec.Command("java", "-version")
+	//cmd := exec.Command("java", "-version")
+	cmd := exec.Command("ls")
+	//cmd := exec.Command("java", "-jar", "/Users/wubingheng/.qsuits/qsuits-7.0.jar")
 	var out bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &out
@@ -107,8 +109,8 @@ func method4() {
 
 func main()  {
 	Init()
-	method1()
-	method2()
-	method3()
+	//method1()
+	//method2()
+	//method3()
 	method4()
 }

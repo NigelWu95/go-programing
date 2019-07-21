@@ -21,9 +21,11 @@ func main() {
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Cookie", "name=anny")
+	//req.Header.Set("Range", "bytes=0-167")
 
 	//resp, err := client.Do(req)
-	ctx, cancel := context.WithTimeout(context.TODO(), time.Second)
+	ctx, cancel := context.WithTimeout(context.TODO(), time.Hour)
+	//ctx, cancel := context.WithTimeout(context.TODO(), time.Second)
 	defer cancel()
 	time.Sleep(900 * time.Millisecond)
 	resp, err := client.Do(req.WithContext(ctx))
