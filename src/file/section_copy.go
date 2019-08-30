@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-func main(){
+func main() {
 
 	fileName := "/Users/wubingheng/Downloads/8.jpeg"
 	desFileName := "/Users/wubingheng/Downloads/8-bak.jpeg"
@@ -33,7 +33,7 @@ func main(){
 		fmt.Println(err)
 	}
 
-	for i := 0; i <= int(count); i++ {
+	for i := 0; i < int(count); i++ {
 		//申明一个byte
 		b := make([]byte, si)
 		//从哪个位置开始读
