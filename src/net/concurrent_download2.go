@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -15,57 +14,37 @@ import (
 	"time"
 )
 
-const (
-	//DefaultDownloadBlock int64 = 4194304
-	DefaultDownloadBlock int64 = 1048576
-)
-
-type GoGet struct {
+type HttpGet struct {
 	Url           string
-	Cnt           int
-	DownloadBlock int64
-	CustomCnt     int
-	Latch         int
-	Header        http.Header
+	HttpClient    *http.Client
 	MediaType     string
 	MediaParams   map[string]string
-	FilePath      string // 包括路径和文件名
-	GetClient     *http.Client
 	ContentLength int64
+	DownloadBlock int64
 	DownloadRange [][]int64
-	File          *os.File
+	Count         int
+	FilePath      string // 包括路径和文件名
 	TempFiles     []*os.File
+	File          *os.File
 	WG            sync.WaitGroup
 }
 
-func NewGoGet() *GoGet {
-	get := new(GoGet)
-	get.FilePath = "./"
-	get.GetClient = new(http.Client)
-
-	flag.Parse()
-	get.Url = *urlFlag
-	get.DownloadBlock = DefaultDownloadBlock
-
-	return get
-}
-
-var urlFlag = flag.String("url", "https://search.maven.org/remotecontent?filepath=com/qiniu/qsuits/7.73/qsuits-7.73-jar-with-dependencies.jar", "Fetch file url")
-
 func main() {
-	get := NewGoGet()
-
+	get := new(HttpGet)
+	get.FilePath = "./"
+	get.HttpClient = new(http.Client)
+	get.Url = *urlFlag
+	get.DownloadBlock = 1048576
 	downloadStart := time.Now()
 
 	req, err := http.NewRequest("HEAD", get.Url, nil)
-	resp, err := get.GetClient.Do(req)
-	get.Header = resp.Header
+	resp, err := get.HttpClient.Do(req)
 	if err != nil {
 		log.Panicf("Get %s error %v.\n", get.Url, err)
 	}
-	get.MediaType, get.MediaParams, _ = mime.ParseMediaType(get.Header.Get("Content-Disposition"))
+	get.MediaType, get.MediaParams, _ = mime.ParseMediaType(resp.Header.Get("Content-Disposition"))
 	get.ContentLength = resp.ContentLength
-	get.Cnt = int(math.Ceil(float64(get.ContentLength / get.DownloadBlock)))
+	get.Count = int(math.Ceil(float64(get.ContentLength / get.DownloadBlock)))
 	if strings.HasSuffix(get.FilePath, "/") {
 		get.FilePath += get.MediaParams["filename"]
 	}
@@ -74,16 +53,16 @@ func main() {
 		log.Panicf("Create file %s error %v.\n", get.FilePath, err)
 	}
 	log.Printf("Get %s MediaType:%s, Filename:%s, Size %d.\n", get.Url, get.MediaType, get.MediaParams["filename"], get.ContentLength)
-	if get.Header.Get("Accept-Ranges") != "" {
-		log.Printf("Server %s support Range by %s.\n", get.Header.Get("Server"), get.Header.Get("Accept-Ranges"))
+	if resp.Header.Get("Accept-Ranges") != "" {
+		log.Printf("Server %s support Range by %s.\n", resp.Header.Get("Server"), resp.Header.Get("Accept-Ranges"))
 	} else {
-		log.Printf("Server %s doesn't support Range.\n", get.Header.Get("Server"))
+		log.Printf("Server %s doesn't support Range.\n", resp.Header.Get("Server"))
 	}
 
-	log.Printf("Start to download %s with %d thread.\n", get.MediaParams["filename"], get.Cnt)
+	log.Printf("Start to download %s with %d thread.\n", get.MediaParams["filename"], get.Count)
 	var rangeStart int64 = 0
-	for i := 0; i < get.Cnt; i++ {
-		if i != get.Cnt - 1 {
+	for i := 0; i < get.Count; i++ {
+		if i != get.Count - 1 {
 			get.DownloadRange = append(get.DownloadRange, []int64{rangeStart, rangeStart + get.DownloadBlock - 1})
 		} else {
 			// 最后一块
@@ -107,7 +86,6 @@ func main() {
 	}
 
 	go get.Watch()
-	get.Latch = get.Cnt
 	for i, _ := range get.DownloadRange {
 		get.WG.Add(1)
 		go get.Download(i)
@@ -137,7 +115,7 @@ func main() {
 	}()
 }
 
-func (get *GoGet) Download(i int) {
+func (get *HttpGet) Download(i int) {
 	defer get.WG.Done()
 	if get.DownloadRange[i][0] > get.DownloadRange[i][1] {
 		return
@@ -149,13 +127,13 @@ func (get *GoGet) Download(i int) {
 
 	req, err := http.NewRequest("GET", get.Url, nil)
 	req.Header.Set("Range", "bytes=" + rangeI)
-	resp, err := get.GetClient.Do(req)
+	resp, err := get.HttpClient.Do(req)
 	defer resp.Body.Close()
 	if err != nil {
 		log.Printf("Download #%d error %v.\n", i, err)
 	} else {
 		cnt, err := io.Copy(get.TempFiles[i], resp.Body)
-		if cnt == int64(get.DownloadRange[i][1] - get.DownloadRange[i][0]+1) {
+		if cnt == int64(get.DownloadRange[i][1] - get.DownloadRange[i][0] + 1) {
 			log.Printf("Download #%d complete.\n", i)
 		} else {
 			reqDump, _ := httputil.DumpRequest(req, false)
@@ -165,7 +143,7 @@ func (get *GoGet) Download(i int) {
 	}
 }
 
-func (get *GoGet) Watch() {
+func (get *HttpGet) Watch() {
 	fmt.Printf("[=================>]\n")
 }
 
