@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	//DefaultDownloadBlock int64 = 4194304
-	DefaultDownloadBlock int64 = 1048576
+	DefaultDownloadBlock int64 = 4194304
+	//DefaultDownloadBlock int64 = 1048576
 )
 
 type GoGet struct {
