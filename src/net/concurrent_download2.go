@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -30,36 +32,36 @@ type HttpGet struct {
 }
 
 func main() {
+
 	get := new(HttpGet)
-	get.FilePath = "./"
+	get.FilePath = "./qsuits-7.73-jar-with-dependencies.jar"
 	get.HttpClient = new(http.Client)
-	get.Url = *urlFlag
+	get.Url = "https://search.maven.org/remotecontent?filepath=com/qiniu/qsuits/7.73/qsuits-7.73-jar-with-dependencies.jar"
 	get.DownloadBlock = 1048576
 	downloadStart := time.Now()
 
-	req, err := http.NewRequest("HEAD", get.Url, nil)
+	req, err := http.NewRequest("GET", get.Url, nil)
+	req.Header.Set("Range", "bytes=0-100")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
 	resp, err := get.HttpClient.Do(req)
 	if err != nil {
 		log.Panicf("Get %s error %v.\n", get.Url, err)
 	}
 	get.MediaType, get.MediaParams, _ = mime.ParseMediaType(resp.Header.Get("Content-Disposition"))
-	get.ContentLength = resp.ContentLength
-	get.Count = int(math.Ceil(float64(get.ContentLength / get.DownloadBlock)))
-	if strings.HasSuffix(get.FilePath, "/") {
-		get.FilePath += get.MediaParams["filename"]
+	contentRange := strings.Split(resp.Header.Get("Content-Range"), "/")
+	if len(contentRange) < 2 {
+		err = errors.New("can not get content-range")
+		fmt.Println(err.Error())
+		panic(err)
 	}
+	get.ContentLength, _ = strconv.ParseInt(contentRange[1], 10, 64)
+	get.Count = int(math.Ceil(float64(get.ContentLength / get.DownloadBlock)))
 	get.File, err = os.Create(get.FilePath)
 	if err != nil {
 		log.Panicf("Create file %s error %v.\n", get.FilePath, err)
 	}
-	log.Printf("Get %s MediaType:%s, Filename:%s, Size %d.\n", get.Url, get.MediaType, get.MediaParams["filename"], get.ContentLength)
-	if resp.Header.Get("Accept-Ranges") != "" {
-		log.Printf("Server %s support Range by %s.\n", resp.Header.Get("Server"), resp.Header.Get("Accept-Ranges"))
-	} else {
-		log.Printf("Server %s doesn't support Range.\n", resp.Header.Get("Server"))
-	}
-
-	log.Printf("Start to download %s with %d thread.\n", get.MediaParams["filename"], get.Count)
 	var rangeStart int64 = 0
 	for i := 0; i < get.Count; i++ {
 		if i != get.Count - 1 {
@@ -85,7 +87,6 @@ func main() {
 		get.TempFiles = append(get.TempFiles, tempFile)
 	}
 
-	go get.Watch()
 	for i, _ := range get.DownloadRange {
 		get.WG.Add(1)
 		go get.Download(i)
@@ -127,10 +128,13 @@ func (get *HttpGet) Download(i int) {
 
 	req, err := http.NewRequest("GET", get.Url, nil)
 	req.Header.Set("Range", "bytes=" + rangeI)
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
 	resp, err := get.HttpClient.Do(req)
 	defer resp.Body.Close()
 	if err != nil {
-		log.Printf("Download #%d error %v.\n", i, err)
+		log.Panicf("Download #%d error %v.\n", i, err)
 	} else {
 		cnt, err := io.Copy(get.TempFiles[i], resp.Body)
 		if cnt == int64(get.DownloadRange[i][1] - get.DownloadRange[i][0] + 1) {
@@ -142,8 +146,3 @@ func (get *HttpGet) Download(i int) {
 		}
 	}
 }
-
-func (get *HttpGet) Watch() {
-	fmt.Printf("[=================>]\n")
-}
-
